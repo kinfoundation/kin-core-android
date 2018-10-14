@@ -7,7 +7,7 @@ import android.support.annotation.NonNull;
 import com.here.oksse.ServerSentEvent;
 import java.math.BigDecimal;
 import java.util.List;
-import kin.core.ServiceProvider.KinAsset;
+import kin.core.Environment.KinAsset;
 import org.stellar.sdk.KeyPair;
 import org.stellar.sdk.LedgerEntryChange;
 import org.stellar.sdk.LedgerEntryChanges;
@@ -22,7 +22,7 @@ import org.stellar.sdk.responses.TransactionResponse;
 /**
  * Provides listeners, for various events happens on the blockchain.
  */
-public class BlockchainEvents {
+class BlockchainEvents {
 
     private static final String CURSOR_FUTURE_ONLY = "now";
     private final Server server;
@@ -41,7 +41,7 @@ public class BlockchainEvents {
      *
      * @param listener listener object for payment events
      */
-    public ListenerRegistration addBalanceListener(@NonNull final EventListener<Balance> listener) {
+    ListenerRegistration addBalanceListener(@NonNull final EventListener<Balance> listener) {
         checkNotNull(listener, "listener");
         ServerSentEvent serverSentEvent = server
             .transactions()
@@ -93,7 +93,7 @@ public class BlockchainEvents {
      *
      * @param listener listener object for payment events
      */
-    public ListenerRegistration addPaymentListener(@NonNull final EventListener<PaymentInfo> listener) {
+    ListenerRegistration addPaymentListener(@NonNull final EventListener<PaymentInfo> listener) {
         checkNotNull(listener, "listener");
         ServerSentEvent serverSentEvent = server
             .transactions()
@@ -114,7 +114,7 @@ public class BlockchainEvents {
      *
      * @param listener listener object for payment events
      */
-    public ListenerRegistration addAccountCreationListener(final EventListener<Void> listener) {
+    ListenerRegistration addAccountCreationListener(final EventListener<Void> listener) {
         checkNotNull(listener, "listener");
         ServerSentEvent serverSentEvent = server.transactions()
             .forAccount(accountKeyPair)
@@ -135,27 +135,35 @@ public class BlockchainEvents {
     }
 
     private void extractPaymentsFromTransaction(TransactionResponse transactionResponse,
-        EventListener<PaymentInfo> listener) {
+                                                EventListener<PaymentInfo> listener) {
+        PaymentInfo paymentInfo = getPaymentInfo(transactionResponse);
+        if (paymentInfo != null) {
+            listener.onEvent(paymentInfo);
+        }
+    }
+
+    PaymentInfo getPaymentInfo(TransactionResponse transactionResponse) {
+        PaymentInfo paymentInfo = null;
         List<Operation> operations = transactionResponse.getOperations();
         if (operations != null) {
             for (Operation operation : operations) {
                 if (operation instanceof PaymentOperation) {
                     PaymentOperation paymentOperation = (PaymentOperation) operation;
                     if (isPaymentInKin(paymentOperation)) {
-                        PaymentInfo paymentInfo = new PaymentInfoImpl(
-                            transactionResponse.getCreatedAt(),
-                            paymentOperation.getDestination().getAccountId(),
-                            extractSourceAccountId(transactionResponse, paymentOperation),
-                            new BigDecimal(paymentOperation.getAmount()),
-                            new TransactionIdImpl(transactionResponse.getHash()),
-                            extractHashTextIfAny(transactionResponse)
+                        paymentInfo = new PaymentInfoImpl(
+                                transactionResponse.getCreatedAt(),
+                                paymentOperation.getDestination().getAccountId(),
+                                extractSourceAccountId(transactionResponse, paymentOperation),
+                                new BigDecimal(paymentOperation.getAmount()),
+                                new TransactionIdImpl(transactionResponse.getHash()),
+                                extractHashTextIfAny(transactionResponse)
                         );
-                        listener.onEvent(paymentInfo);
                     }
                 }
             }
-
         }
+        // return a new payment info object if possible, otherwise return null.
+        return paymentInfo;
     }
 
     private String extractSourceAccountId(TransactionResponse transactionResponse, Operation operation) {
